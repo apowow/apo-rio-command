@@ -12,8 +12,18 @@ const DUNGEONS = [
 ];
 
 function normalizeRegion(value) {
-  const region = String(value || 'eu').trim().toLowerCase();
-  return region === 'us' ? 'us' : region === 'eu' ? 'eu' : null;
+  const raw = String(value ?? '').trim().toLowerCase();
+
+  if (
+    raw === '' ||
+    raw === 'undefined' ||
+    raw === 'null' ||
+    raw === 'none'
+  ) {
+    return 'eu';
+  }
+
+  return raw === 'us' ? 'us' : raw === 'eu' ? 'eu' : null;
 }
 
 function normalizeRealm(value) {
