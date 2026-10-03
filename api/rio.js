@@ -96,7 +96,7 @@ async function getSeasonSlug(region) {
   return season.slug;
 }
 
-async function getCutoff(region, season) {
+async function getCutoffs(region, season) {
   const key = `${region}:${season}`;
   const cached = cutoffCache.get(key);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
@@ -106,11 +106,15 @@ async function getCutoff(region, season) {
   url.searchParams.set('season', season);
 
   const data = await fetchJson(url);
-  const cutoff = num(data?.cutoffs?.p999?.all?.quantileMinValue);
-  if (cutoff === null) throw new Error('NO_CUTOFF');
 
-  cutoffCache.set(key, { value: cutoff, at: Date.now() });
-  return cutoff;
+  const top01 = num(data?.cutoffs?.p999?.all?.quantileMinValue);
+  const top1 = num(data?.cutoffs?.p99?.all?.quantileMinValue);
+
+  if (top01 === null || top1 === null) throw new Error('NO_CUTOFF');
+
+  const value = { top01, top1 };
+  cutoffCache.set(key, { value, at: Date.now() });
+  return value;
 }
 
 function extractCurrentScore(data, season) {
@@ -200,28 +204,29 @@ export default async function handler(req, res) {
 
   try {
     const season = await getSeasonSlug(region);
-    const [cutoff, character] = await Promise.all([
-      getCutoff(region, season),
+    const [cutoffs, character] = await Promise.all([
+      getCutoffs(region, season),
       getCharacter(region, realm, name, season),
     ]);
 
-    const diff = character.score - cutoff;
+    const diff01 = character.score - cutoffs.top01;
+    const diff1 = character.score - cutoffs.top1;
+
     const regionLabel = region.toUpperCase();
     const who = `${character.name}-${character.realm}`;
 
-    if (diff >= 0) {
-      return reply(
-        res,
-        200,
-        `${who}: ${fmt(character.score)} RIO | 🟢 +${fmt(diff)} dentro del cutoff ${regionLabel} 0.1% (${fmt(cutoff)})`,
-        true
-      );
-    }
+    const text01 = diff01 >= 0
+      ? `🟢 +${fmt(diff01)} sobre 0.1% (${fmt(cutoffs.top01)})`
+      : `🔴 ${fmt(diff01)} del 0.1% (${fmt(cutoffs.top01)})`;
+
+    const text1 = diff1 >= 0
+      ? `🟢 +${fmt(diff1)} sobre 1% (${fmt(cutoffs.top1)})`
+      : `🔴 ${fmt(diff1)} del 1% (${fmt(cutoffs.top1)})`;
 
     return reply(
       res,
       200,
-      `${who}: ${fmt(character.score)} RIO | 🔴 ${fmt(diff)} del cutoff ${regionLabel} 0.1% (${fmt(cutoff)})`,
+      `${who}: ${fmt(character.score)} RIO | ${regionLabel} | ${text01} | ${text1}`,
       true
     );
   } catch (error) {
