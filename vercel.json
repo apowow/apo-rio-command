@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/rio.js": {
+      "maxDuration": 10
+    }
+  }
+}
