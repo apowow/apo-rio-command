@@ -25,8 +25,12 @@ function normalizeRegion(value) {
 function normalizeRealm(value) {
   return String(value || '')
     .trim()
+    .toLowerCase()
+    .replace(/[’']/g, '')
     .replace(/_/g, '-')
-    .replace(/\s+/g, '-');
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
 }
 
 async function fetchJson(url) {
@@ -120,21 +124,40 @@ function extractCurrentScore(data, season) {
 }
 
 async function getCharacter(region, realm, name, season) {
-  const url = new URL(`${RIO_BASE}/characters/profile`);
-  url.searchParams.set('region', region);
-  url.searchParams.set('realm', realm);
-  url.searchParams.set('name', name);
-  url.searchParams.set('fields', 'mythic_plus_scores_by_season:current');
+  const candidates = [...new Set([
+    realm,
+    realm.replace(/-/g, ''),
+  ])].filter(Boolean);
 
-  const data = await fetchJson(url);
-  const score = extractCurrentScore(data, season);
-  if (score === null) throw new Error('NO_SCORE');
+  let lastError = null;
 
-  return {
-    name: data?.name || name,
-    realm: data?.realm || realm,
-    score,
-  };
+  for (const realmCandidate of candidates) {
+    const url = new URL(`${RIO_BASE}/characters/profile`);
+    url.searchParams.set('region', region);
+    url.searchParams.set('realm', realmCandidate);
+    url.searchParams.set('name', name);
+    url.searchParams.set('fields', 'mythic_plus_scores_by_season:current');
+
+    try {
+      const data = await fetchJson(url);
+      const score = extractCurrentScore(data, season);
+      if (score === null) throw new Error('NO_SCORE');
+
+      return {
+        name: data?.name || name,
+        realm: data?.realm || realmCandidate,
+        score,
+      };
+    } catch (error) {
+      lastError = error;
+      const code = error?.message || '';
+      if (code !== 'HTTP_400' && code !== 'HTTP_404') {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error('HTTP_404');
 }
 
 function reply(res, status, text, cache = false) {
