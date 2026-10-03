@@ -108,7 +108,7 @@ async function getCutoffs(region, season) {
   const data = await fetchJson(url);
 
   const top01 = num(data?.cutoffs?.p999?.all?.quantileMinValue);
-  const top1 = num(data?.cutoffs?.p99?.all?.quantileMinValue);
+  const top1 = num(data?.cutoffs?.p990?.all?.quantileMinValue);
 
   if (top01 === null || top1 === null) throw new Error('NO_CUTOFF');
 
